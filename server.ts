@@ -1363,9 +1363,13 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '127.0.0.1', () => {
+  return app.listen(PORT, '127.0.0.1', () => {
     console.log(`نظام معرض حور يعمل بنجاح على المنفذ ${PORT}`);
   });
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+export { startServer };

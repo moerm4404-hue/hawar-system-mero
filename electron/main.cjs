@@ -1,5 +1,4 @@
 const { app, BrowserWindow, dialog, shell } = require('electron');
-const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -43,25 +42,25 @@ async function createWindow() {
   const fallbackServerFile = path.join(app.getAppPath(), 'dist', 'server.cjs');
   const selectedServerFile = fs.existsSync(serverFile) ? serverFile : fallbackServerFile;
 
-  const logDir = path.join(app.getPath('userData'), 'logs');
-  fs.mkdirSync(logDir, { recursive: true });
-  const logFile = fs.openSync(path.join(logDir, 'server.log'), 'a');
-  serverProcess = spawn(process.execPath, [selectedServerFile], {
-    cwd: appRoot,
-    windowsHide: true,
-    env: {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: '1',
-      NODE_ENV: 'production',
-      PORT: String(PORT),
-      HAWR_APP_ROOT: app.getAppPath(),
-      HAWR_DATA_DIR: path.join(app.getPath('userData'), 'data'),
-    },
-    stdio: ['ignore', logFile, logFile],
-  });
-  serverProcess.on('error', (error) => {
+  const previousPort = process.env.PORT;
+  const previousAppRoot = process.env.HAWR_APP_ROOT;
+  const previousDataDir = process.env.HAWR_DATA_DIR;
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = String(PORT);
+  process.env.HAWR_APP_ROOT = app.getAppPath();
+  process.env.HAWR_DATA_DIR = path.join(app.getPath('userData'), 'data');
+  try {
+    const serverModule = require(selectedServerFile);
+    serverProcess = await serverModule.startServer();
+  } catch (error) {
     dialog.showErrorBox('تعذر تشغيل خدمة نظام معرض حور', error.message);
-  });
+    app.quit();
+    return;
+  } finally {
+    if (previousPort === undefined) delete process.env.PORT; else process.env.PORT = previousPort;
+    if (previousAppRoot === undefined) delete process.env.HAWR_APP_ROOT; else process.env.HAWR_APP_ROOT = previousAppRoot;
+    if (previousDataDir === undefined) delete process.env.HAWR_DATA_DIR; else process.env.HAWR_DATA_DIR = previousDataDir;
+  }
 
   try {
     await waitForServer(`http://127.0.0.1:${PORT}/api/system/status`);
@@ -97,7 +96,7 @@ async function createWindow() {
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
-  if (serverProcess && !serverProcess.killed) serverProcess.kill();
+  if (serverProcess) serverProcess.close();
 });
 app.on('second-instance', () => {
   const [win] = BrowserWindow.getAllWindows();
