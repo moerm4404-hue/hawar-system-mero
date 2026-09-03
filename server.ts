@@ -7,7 +7,7 @@ import { getDb, saveDb, hasAdmin, logAudit, createBackup, verifyAndRestoreBackup
 import { hashPassword, verifyPassword } from './src/server/auth.ts';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -41,7 +41,7 @@ async function startServer() {
   app.get('/api/system/status', async (req: Request, res: Response) => {
     try {
       const adminExists = await hasAdmin();
-      const dbPath = path.join(process.cwd(), 'data', 'hawr-gallery.sqlite');
+      const dbPath = path.join(process.env.HAWR_DATA_DIR || path.join(process.cwd(), 'data'), 'hawr-gallery.sqlite');
       let dbSizeKB = 0;
       if (fs.existsSync(dbPath)) {
         const stats = fs.statSync(dbPath);
@@ -1356,14 +1356,14 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.env.HAWR_APP_ROOT || process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '127.0.0.1', () => {
     console.log(`نظام معرض حور يعمل بنجاح على المنفذ ${PORT}`);
   });
 }

@@ -6,7 +6,7 @@ import { hashPassword } from './auth.ts';
 let SQL: SqlJsStatic | null = null;
 let db: Database | null = null;
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = process.env.HAWR_DATA_DIR || path.join(process.cwd(), 'data');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const DB_FILE = path.join(DATA_DIR, 'hawr-gallery.sqlite');
 
