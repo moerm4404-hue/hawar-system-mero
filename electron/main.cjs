@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, shell } = require('electron');
-const { fork } = require('node:child_process');
+const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -43,16 +43,24 @@ async function createWindow() {
   const fallbackServerFile = path.join(app.getAppPath(), 'dist', 'server.cjs');
   const selectedServerFile = fs.existsSync(serverFile) ? serverFile : fallbackServerFile;
 
-  serverProcess = fork(selectedServerFile, [], {
+  const logDir = path.join(app.getPath('userData'), 'logs');
+  fs.mkdirSync(logDir, { recursive: true });
+  const logFile = fs.openSync(path.join(logDir, 'server.log'), 'a');
+  serverProcess = spawn(process.execPath, [selectedServerFile], {
     cwd: appRoot,
+    windowsHide: true,
     env: {
       ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: 'production',
       PORT: String(PORT),
       HAWR_APP_ROOT: app.getAppPath(),
       HAWR_DATA_DIR: path.join(app.getPath('userData'), 'data'),
     },
-    stdio: 'ignore',
+    stdio: ['ignore', logFile, logFile],
+  });
+  serverProcess.on('error', (error) => {
+    dialog.showErrorBox('تعذر تشغيل خدمة نظام معرض حور', error.message);
   });
 
   try {
