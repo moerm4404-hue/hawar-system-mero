@@ -3,6 +3,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 
+// Disable GPU initialization failures on older/virtualized Windows devices.
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-gpu');
+app.setAppLogsPath(path.join(app.getPath('userData'), 'logs'));
+
 const PORT = 3417;
 let serverProcess;
 
@@ -38,9 +43,10 @@ function waitForServer(url, timeout = 15000) {
 async function createWindow() {
   copySeedDatabase();
   const appRoot = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
-  const serverFile = path.join(appRoot, 'app.asar', 'dist', 'server.cjs').replace('app.asar/app.asar', 'app.asar');
-  const fallbackServerFile = path.join(app.getAppPath(), 'dist', 'server.cjs');
-  const selectedServerFile = fs.existsSync(serverFile) ? serverFile : fallbackServerFile;
+  const selectedServerFile = path.join(app.getAppPath(), 'dist', 'server.cjs');
+  if (!fs.existsSync(selectedServerFile)) {
+    throw new Error(`ملف تشغيل النظام غير موجود: ${selectedServerFile}`);
+  }
 
   const previousPort = process.env.PORT;
   const previousAppRoot = process.env.HAWR_APP_ROOT;
@@ -75,7 +81,7 @@ async function createWindow() {
     height: 920,
     minWidth: 1100,
     minHeight: 700,
-    show: false,
+    show: true,
     title: 'نظام إدارة معرض حور',
     backgroundColor: '#f1f5f9',
     autoHideMenuBar: true,
@@ -86,14 +92,33 @@ async function createWindow() {
     },
   });
   win.once('ready-to-show', () => win.show());
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    win.show();
+    dialog.showErrorBox('تعذر تحميل واجهة نظام معرض حور', `${errorCode}: ${errorDescription}`);
+  });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  await win.loadURL(`http://127.0.0.1:${PORT}`);
+  try {
+    await win.loadURL(`http://127.0.0.1:${PORT}`);
+  } catch (error) {
+    win.show();
+    dialog.showErrorBox('تعذر تحميل واجهة نظام معرض حور', `${error.message}\n\nيمكن مراجعة سجل التشغيل داخل مجلد Logs الخاص بالبرنامج.`);
+  }
 }
 
-app.whenReady().then(createWindow);
+process.on('uncaughtException', (error) => {
+  dialog.showErrorBox('خطأ غير متوقع في نظام معرض حور', error.stack || error.message);
+});
+process.on('unhandledRejection', (error) => {
+  dialog.showErrorBox('خطأ غير متوقع في نظام معرض حور', String(error));
+});
+
+app.whenReady().then(createWindow).catch((error) => {
+  dialog.showErrorBox('تعذر بدء نظام معرض حور', error.stack || error.message);
+  app.quit();
+});
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
   if (serverProcess) serverProcess.close();
